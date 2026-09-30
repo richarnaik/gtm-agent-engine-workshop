@@ -17,6 +17,7 @@ Install:
 import json
 import os
 import random
+import re
 import uuid
 
 from dotenv import load_dotenv
@@ -29,6 +30,7 @@ from pydantic import BaseModel
 from langchain.tools import tool, ToolRuntime
 from langchain_openai import ChatOpenAI
 from deepagents import create_deep_agent
+from langsmith.run_trees import get_cached_client
 
 from . import data_service
 from .data_service import REP_IDS
@@ -214,6 +216,12 @@ INTENT_KEYWORDS = (
     ("lookup_offering", ("offering", "offer-", "product line", "contract type")),
 )
 
+TRACE_INTENTS = {
+    "send_email": "outreach_email",
+    "update_prospect": "profile_update",
+    "score_prospect": "fit_scoring",
+}
+
 
 def classify_intent(user_message):
     "Classify a rep request into one of a fixed set of request intents."
@@ -231,19 +239,26 @@ def run_agent(user_message, *, user_id=None, environment="production", thread_id
     # Pre-assign the root run id so the caller can attach feedback to this run;
     # the tracing context is not visible to us once invoke() has returned.
     run_id = uuid.uuid4()
-    result = gtm_agent.invoke(
-        {"messages": [{"role": "user", "content": user_message}]},
-        config={
-            "run_name": "GTM Assistant",
-            "run_id": run_id,
-            "metadata": {
-                "thread_id": thread_id,
-                "user_id": user_id,
-                "environment": environment,
-                "request_intent": classify_intent(user_message),
+    metadata = {
+        "thread_id": thread_id,
+        "user_id": user_id,
+        "environment": environment,
+        "request_intent": TRACE_INTENTS.get(classify_intent(user_message), "profile_update"),
+    }
+    offering_match = re.search(r"\bOFFER-\d+\b", user_message or "", re.IGNORECASE)
+    if offering_match:
+        metadata["offering_id"] = offering_match.group(0).upper()
+    try:
+        result = gtm_agent.invoke(
+            {"messages": [{"role": "user", "content": user_message}]},
+            config={
+                "run_name": "GTM Assistant",
+                "run_id": run_id,
+                "metadata": metadata,
             },
-        },
-    )
+        )
+    finally:
+        get_cached_client().flush()
     return {
         "reply": result["messages"][-1].content,
         "messages": result["messages"],

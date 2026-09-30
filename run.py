@@ -36,10 +36,10 @@ EXAMPLES = [
 
 
 if __name__ == "__main__":
-    for user_id, q in EXAMPLES:
-        print(f"\n> [{user_id}] {q}")
-        result = run_agent(q, user_id=user_id)
-        print(result["reply"])
-    # Traces are shipped on a background thread, so flush before exiting to make
-    # sure every run has landed in LangSmith.
-    get_cached_client().flush()
+    try:
+        for user_id, q in EXAMPLES:
+            print(f"\n> [{user_id}] {q}")
+            result = run_agent(q, user_id=user_id)
+            print(result["reply"])
+    finally:
+        get_cached_client().flush()
