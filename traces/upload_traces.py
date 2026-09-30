@@ -191,6 +191,7 @@ def main():
                 "outputs": run.get("outputs"),
                 "error": run.get("error"),
                 "extra": run.get("extra") or {},
+                "metadata": run.get("metadata") or (run.get("extra") or {}).get("metadata"),
                 "tags": run.get("tags"),
                 "start_time": parse_dt(run["start_time"]),
                 "end_time": parse_dt(run["end_time"]) if run.get("end_time") else None,
@@ -267,6 +268,7 @@ def main():
                 outputs=run.get("outputs"),
                 error=run.get("error"),
                 extra=run.get("extra"),
+                metadata=run.get("metadata"),
                 tags=run.get("tags"),
                 start_time=run["start_time"],
                 end_time=run["end_time"],
@@ -301,7 +303,7 @@ def main():
                 run_ids=list(expected_ids),
                 # The check needs ids, not the inputs/outputs hanging off them. These
                 # are the fields the Run model requires; trimming further fails to parse.
-                select=["id", "name", "start_time", "run_type", "trace_id"],
+                select=["id", "name", "start_time", "run_type", "trace_id", "parent_run_id"],
             )
         }
         if len(landed_ids) == len(expected_ids):
@@ -317,6 +319,27 @@ def main():
         )
         raise SystemExit(1)
     print(f"Verified {len(landed_ids)}/{len(expected_ids)} runs landed.")
+
+    landed_runs = list(
+        client.list_runs(
+            project_id=project_id,
+            run_ids=list(expected_ids),
+            select=["id", "trace_id", "parent_run_id"],
+        )
+    )
+    landed_by_id = {str(run.id): run for run in landed_runs}
+    missing_parents = {
+        str(run.parent_run_id)
+        for run in landed_runs
+        if run.parent_run_id and str(run.parent_run_id) not in landed_by_id
+    }
+    if missing_parents:
+        print(
+            f"ERROR: {len(missing_parents)} parent_run_id references do not resolve "
+            "within the uploaded traces.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
     # Every trace carries the rating its rep left on the reply. Traces captured
     # before ratings were collected have none, so derive the one that rep would

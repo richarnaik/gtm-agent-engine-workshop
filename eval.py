@@ -3,6 +3,7 @@ import os
 from langsmith import evaluate
 
 from gtm_agent.gtm_agent import run_agent
+from traces.verify_traces import verify_representative_trace
 
 
 def evaluation_target(inputs: dict) -> dict:
@@ -17,6 +18,7 @@ def evaluation_target(inputs: dict) -> dict:
 
 
 def main() -> None:
+    verify_representative_trace()
     # Hard-fails if DATASET_NAME is not set.
     dataset = os.environ["DATASET_NAME"]
 

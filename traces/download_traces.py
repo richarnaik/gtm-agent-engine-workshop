@@ -84,6 +84,17 @@ def scrub_metadata(extra):
     return scrubbed
 
 
+def scrub_run_metadata(metadata):
+    """Remove capture-environment identifiers from run metadata."""
+    if not metadata:
+        return metadata
+    cleaned = {k: v for k, v in metadata.items() if not k.startswith("LANGSMITH_")}
+    revision_id = cleaned.get("revision_id")
+    if isinstance(revision_id, str) and revision_id.endswith("-dirty"):
+        cleaned["revision_id"] = revision_id[: -len("-dirty")]
+    return cleaned
+
+
 # Feedback is a separate resource from runs -- list_runs never returns it -- so it
 # has to be fetched by run id and stitched back on. The ids travel as repeated
 # query params, so ask for a batch at a time rather than the whole project at once.
@@ -147,6 +158,7 @@ def main():
                 "outputs": run.outputs,
                 "error": run.error,
                 "extra": scrub_metadata(run.extra),
+                "metadata": scrub_run_metadata(run.metadata),
                 "tags": run.tags,
                 "start_time": run.start_time.isoformat() if run.start_time else None,
                 "end_time": run.end_time.isoformat() if run.end_time else None,
